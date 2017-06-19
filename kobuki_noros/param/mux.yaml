@@ -1,0 +1,26 @@
+subscribers:
+  - name:        "Default input"
+    topic:       "cmd_vel"
+    timeout:     0.2
+    priority:    0
+    short_desc:  "Default velocity topic; controllers unaware that we are multiplexing cmd_vel will come here"
+  - name:        "Safety Controller"
+    topic:       "safety_controller"
+    timeout:     0.2
+    priority:    10
+    short_desc:  "Kobuki's safety controller"
+  - name:        "Keyboard operation"
+    topic:       "keyboard_teleop"
+    timeout:     0.2
+    priority:    7
+    short_desc:  "Kobuki's keyboard operation"
+  - name:        "NoROS Talker"
+    topic:       "talker"
+    timeout:     1.0
+    priority:    5
+    short_desc:  "Voice commands for Kobuki"
+  - name:        "NoROS Whistle"
+    topic:       "whistle"
+    timeout:     1.0
+    priority:    5
+    short_desc:  "Whistle commands for Kobuki"

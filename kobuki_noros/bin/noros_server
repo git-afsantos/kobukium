@@ -1,0 +1,11 @@
+#!/usr/bin/env python
+
+import kobuki_noros.server as server
+import rospy
+
+if __name__ == '__main__':
+    s = server.Server()
+    try:
+        s.run()
+    except rospy.ROSInterruptException:
+        s.stop()
