@@ -5,7 +5,7 @@ import socket
 import rospy
 from geometry_msgs.msg import Twist
 
-MAX_LINEAR = 0.375  # m/s
+MAX_LINEAR = 0.25   # m/s
 MAX_ANGULAR = 1.9   # rad/s
 
 ###############################################################################
@@ -78,14 +78,18 @@ class ClientThread(threading.Thread):
                 wz = float(tokens[1])
                 if (vx < -MAX_LINEAR or vx > MAX_LINEAR
                         or wz < -MAX_ANGULAR or wz > MAX_ANGULAR):
+                    print "Command exceeds limits", vx, wz
                     self.client.sendall("NOK")
                 else:
                     self.linear_vel = vx
                     self.angular_vel = wz
+                    print "Received", vx, wz
                     self.client.sendall("OK")
             except ValueError as e:
+                print "Wrong command format", command
                 self.client.sendall("NOK")
         else:
+            print "Wrong command format", command
             self.client.sendall("NOK")
 
 
