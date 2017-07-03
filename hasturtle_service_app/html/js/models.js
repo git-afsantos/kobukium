@@ -67,6 +67,8 @@ THE SOFTWARE.
             mission:    null
         },
 
+        wsAddress: window.App.wsAddress,
+
         initialize: function () {
             this.server = null;
         },
@@ -78,7 +80,7 @@ THE SOFTWARE.
 
         connect: function () {
             if (this.server == null) {
-                this.server = new WebSocket("ws://localhost:8080");
+                this.server = new WebSocket(self.wsAddress);
                 this.server.onopen = _.bind(this.onConnect, this);
                 this.server.onclose = _.bind(this.onDisconnect, this);
                 this.server.onmessage = _.bind(this.onMessage, this);
