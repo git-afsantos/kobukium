@@ -4,11 +4,11 @@
   <version>0.0.1</version>
   <description>kobuki_noros provides a small server that accepts commands via socket and forwards to the proper ROS topics.</description>
 
-  <maintainer email="andre.f.santos@inesctec.pt">Andre Santos</maintainer>
+  <maintainer email="andre.f.santos@inesctec.pt">André Santos</maintainer>
 
   <license>MIT</license>
 
-  <author email="andre.f.santos@inesctec.pt">Andre Santos</author>
+  <author email="andre.f.santos@inesctec.pt">André Santos</author>
 
 
   <buildtool_depend>catkin</buildtool_depend>

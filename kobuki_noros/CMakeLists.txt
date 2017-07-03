@@ -24,10 +24,10 @@ catkin_install_python(PROGRAMS bin/noros_server
                                scripts/noros_kobuki_test
                       DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 
-install(DIRECTORY launch
-        DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+install(DIRECTORY launch/
+        DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
 )
 
-install(DIRECTORY param
-        DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+install(DIRECTORY param/
+        DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/param
 )
