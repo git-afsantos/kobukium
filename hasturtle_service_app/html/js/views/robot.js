@@ -94,6 +94,8 @@ THE SOFTWARE.
                 } else {
                     this.router.navigate("locations", this.navigateOptions);
                 }
+            } else if (status == "planning") {
+                this.strings.robotStatus = "Planning";
             }
             this.render();
         },
