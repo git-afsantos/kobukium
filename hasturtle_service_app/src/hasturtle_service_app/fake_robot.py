@@ -154,8 +154,8 @@ class Robot(object):
                 if self.simulate_online:
                     self.simulate_online = False
                     self._on_diagnostics(None)
-                if self.move_base.cancelled:
-                    self.move_base.cancelled = False
+                if self.goal_cancelled:
+                    self.goal_cancelled = False
                     self.navigating = -1
                     self._on_move_done("PREEMPTED", None)
                 elif self.navigating > 0:
