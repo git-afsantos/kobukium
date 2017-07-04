@@ -80,7 +80,8 @@ THE SOFTWARE.
 
         connect: function () {
             if (this.server == null) {
-                this.server = new WebSocket(self.wsAddress);
+                console.log("Connecting to " + this.wsAddress);
+                this.server = new WebSocket(this.wsAddress);
                 this.server.onopen = _.bind(this.onConnect, this);
                 this.server.onclose = _.bind(this.onDisconnect, this);
                 this.server.onmessage = _.bind(this.onMessage, this);
