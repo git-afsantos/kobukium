@@ -83,6 +83,8 @@ THE SOFTWARE.
             }
             if (status == "offline") {
                 this.strings.robotStatus = "Offline";
+                this.strings.missionStatus = "";
+                this.strings.currentMission = "";
                 this.router.navigate("offline", this.navigateOptions);
             } else if (status == "busy") {
                 this.strings.robotStatus = "Busy";
@@ -96,6 +98,11 @@ THE SOFTWARE.
                 }
             } else if (status == "planning") {
                 this.strings.robotStatus = "Planning";
+            } else if (status == "lost") {
+                this.strings.robotStatus = "Lost";
+                this.strings.missionStatus = "Help the Robot Locate Itself";
+                this.strings.currentMission = "[unknown location]";
+                this.router.navigate("locations", this.navigateOptions);
             }
             this.render();
         },

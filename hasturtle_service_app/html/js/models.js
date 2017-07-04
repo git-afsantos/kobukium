@@ -74,8 +74,8 @@ THE SOFTWARE.
         },
 
         isConnected: function () {
-            // return this.server != null;
-            return this.get("status") != "offline";
+            return this.server != null;
+            // return this.get("status") != "offline";
         },
 
         connect: function () {
@@ -107,7 +107,11 @@ THE SOFTWARE.
         },
 
         setMission: function (goal) {
-            this.server.send(JSON.stringify({"goal": goal}));
+            if (this.get("status") == "lost") {
+                this.server.send(JSON.stringify({"hint": goal}));
+            } else {
+                this.server.send(JSON.stringify({"goal": goal}));
+            }
         },
 
         abortMission: function () {

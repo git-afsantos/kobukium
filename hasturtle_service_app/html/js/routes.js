@@ -44,7 +44,7 @@ THE SOFTWARE.
                 } else {
                     if (App.board != null) App.board.hide();
                     App.board = null;
-                    //App.robot.connect();
+                    App.robot.connect();
                 }
             },
 
