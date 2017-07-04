@@ -100,9 +100,9 @@ THE SOFTWARE.
                 this.strings.robotStatus = "Planning";
             } else if (status == "lost") {
                 this.strings.robotStatus = "Lost";
-                this.strings.missionStatus = "Help the Robot Locate Itself";
+                this.strings.missionStatus = "Help the robot locate itself";
                 this.strings.currentMission = "[unknown location]";
-                this.router.navigate("locations", this.navigateOptions);
+                this.router.navigate("lost", this.navigateOptions);
             }
             this.render();
         },

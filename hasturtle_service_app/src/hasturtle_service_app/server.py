@@ -111,12 +111,12 @@ class TurtleRequestHandler(SimpleHTTPRequestHandler):
     # -- NOTE: This requires some black magic.
     # -- Change the working directory and let the superclass handle it.
             self.path = self.path[5:]
-            wd = self.directory
+            wd = os.getcwd()
             try:
-                self.directory = self.server.data_dir
+                os.chdir(self.server.data_dir)
                 SimpleHTTPRequestHandler.do_GET(self)
             finally:
-                self.directory = wd
+                os.chdir(wd)
         elif self.path == "js/ws.js" or self.path == "/js/ws.js":
             self.send_response(200)
             self.send_header("Content-type", "application/javascript")

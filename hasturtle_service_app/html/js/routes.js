@@ -31,7 +31,8 @@ THE SOFTWARE.
                 "offline":                  "offline",
                 "locations":                "locations",
                 "progress":                 "progress",
-                "feedback":                 "feedback"
+                "feedback":                 "feedback",
+                "lost":                     "locations"
             },
 
             home: function() {
