@@ -52,7 +52,9 @@ C {
 # -----------------
 
 import json
+import math
 import os
+
 from datetime import datetime
 from threading import Thread, Lock
 
@@ -63,10 +65,11 @@ from SimpleHTTPServer import SimpleHTTPRequestHandler
 # --------------------
 
 import rospy
-from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 import actionlib
+
 from actionlib_msgs.msg import GoalStatus
 from geometry_msgs.msg import Pose, Point, Quaternion
+from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 
 # https://github.com/dpallot/simple-websocket-server
 from SimpleWebSocketServer import SimpleWebSocketServer, WebSocket
@@ -181,10 +184,11 @@ class TurtleSocketServer(SimpleWebSocketServer):
 ###############################################################################
 
 class Robot(object):
-    def __init__(self):
+    def __init__(self, world):
         self.lock = Lock()
         self.status = "offline"
         self.location = None
+        self.world = world
         self.missions = []
         self._mission = None
     # -- NOTE: I think we do not need to send all state updates to the client
@@ -220,9 +224,8 @@ class Robot(object):
         """
         with self.lock:
             self._check_status("idle")
-            if goal == self.location:
+            if goal == self.location or not goal in self.world:
                 return
-            # TODO check if goal is valid
             self._mission = {
                 "location": self.location,
                 "time":     datetime.now().strftime(TIME_FORMAT),
@@ -230,10 +233,7 @@ class Robot(object):
                 "status":   "in progress"
             }
             self.status = "planning"
-            # pos, quat = goal to pose
-            position = (1.22, 2.56)
-            quaternion = (0.000, 0.000, 0.000, 1.000)
-        self._go_to(position, quaternion)
+        self._go_to(self.world.get(goal))
 
     def set_user_feedback(self, feedback):
         with self.lock:
@@ -288,10 +288,9 @@ class Robot(object):
             raise RobotStatusError("expected mission status " + status
                                    + "; found " + self._mission["status"])
 
-    def _go_to(self, position, quaternion):
-        position = Point(position[0], position[1], 0.0)
-        quaternion = Quaternion(quaternion[0], quaternion[1],
-                                quaternion[2], quaternion[3])
+    def _go_to(self, location):
+        position = location.to_position(Point)
+        quaternion = location.to_quaternion(Quaternion)
         goal = MoveBaseGoal()
         goal.target_pose.header.frame_id = "map"
         goal.target_pose.header.stamp = rospy.Time.now()
@@ -331,23 +330,75 @@ class Robot(object):
 
 
 ###############################################################################
+# Location Data
+###############################################################################
+
+class Location(object):
+    def __init__(self, data):
+        self.id     = data["id"]
+        self.name   = data["name"]
+        self.x      = data["position"]["x"]
+        self.y      = data["position"]["y"]
+        self.radius = data["radius"]
+        self.orientation = tuple(data.get("orientation", (0.0, 0.0, 0.0, 1.0)))
+
+    def to_position(self, cls):
+        return cls(self.x, self.y, 0.0)
+
+    def to_quaternion(self, cls):
+        return cls(*self.orientation)
+
+    def contains(self, x, y):
+        return self.radius > math.sqrt((x - self.x)**2 + (y - self.y)**2)
+
+
+class World(object):
+    def __init__(self):
+        self.locations = {}
+
+    def get(self, location):
+        return self.locations.get(location)
+
+    def read_from(self, data_dir):
+        self.locations = {}
+        with open(os.path.join(data_dir, "locations.json"), "r") as handle:
+            locations = json.load(handle)
+        for data in locations:
+            self.locations[data["id"]] = Location(data)
+
+    def where_is(self, x, y):
+        for location in self.locations.itervalues():
+            if location.contains(x, y):
+                return location.id
+        return None
+
+    def __contains__(self, location):
+        return location in self.locations
+
+
+###############################################################################
 # Application Controller
 ###############################################################################
 
 class RobotManager(object):
     def __init__(self):
-        self.robot = Robot()
+        self.world = World()
+        self.robot = Robot(self.world)
         self.httpserver = None
         self.wsserver = None
         self._http_thread = None
         self._ws_thread = None
 
-    def start(self, host = "localhost", port = 80, ws_port = 8080,
-              data_dir = os.getcwd()):
+    def start(self, host = None, port = None, ws_port = None, data_dir = None):
+        """Prioritise arguments, then ROS params, then defaults.
+        """
         rospy.init_node("hasturtle")
         rospy.on_shutdown(self.shutdown)
-        # TODO get params from server and use these as defaults
-        # http://wiki.ros.org/rospy_tutorials/Tutorials/Parameters
+        host = host or rospy.get_param("~host", "localhost")
+        port = port or rospy.get_param("~port", 80)
+        ws_port = ws_port or rospy.get_param("~ws_port", 8080)
+        data_dir = data_dir or rospy.get_param("~data_dir", os.getcwd())
+        self.world.read_from(data_dir)
         self._start_servers(host, port, ws_port, data_dir)
         try:
             self.robot.init_ros()
