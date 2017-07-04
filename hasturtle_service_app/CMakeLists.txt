@@ -20,6 +20,7 @@ catkin_package(
 #############
 
 catkin_install_python(PROGRAMS bin/hasturtle_service
+                               scripts/test_fake_robot
                       DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 
 install(DIRECTORY launch/

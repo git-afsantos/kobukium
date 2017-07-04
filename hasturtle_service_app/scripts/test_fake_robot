@@ -1,0 +1,128 @@
+#!/usr/bin/env python
+
+import time
+
+from datetime import datetime
+from random import randint
+from threading import Lock
+
+from hasturtle_service_app.server import Robot, RobotManager
+
+
+TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+
+###############################################################################
+# Fake Robot
+###############################################################################
+
+class FakeMoveBase(object):
+    def __init__(self):
+        self.cancelled = False
+
+    def cancel_goal(self):
+        self.cancelled = True
+
+    def cancel_all_goals(self):
+        self.cancelled = True
+
+
+class FakeRobot(Robot):
+    def __init__(self, world):
+        self.simulate_online = False
+        self.move_goal_set = False
+        Robot.__init__(self, world)
+
+    # Thread: ros
+    def init_ros(self):
+        print "[FakeRobot] starting node"
+        self.move_base = FakeMoveBase()
+        self.simulate_online = True
+
+    # Thread: websocket
+    def _set_location(self, location):
+        print "[FakeRobot] publishing initial pose:", location.name
+
+    # Thread: websocket
+    def _go_to(self, location):
+        print "[FakeRobot] publishing move base goal", location
+        self.move_goal_set = True
+
+    # Thread: ros
+    def _on_move_feedback(self, msg):
+        pass
+
+    # Thread: ros
+    def _on_move_done(self, state, msg):
+        with self.lock:
+            self.status = "idle"
+            self._mission["completed"] = datetime.now().strftime(TIME_FORMAT)
+            if state == "SUCCEEDED":
+                self._mission["status"] = "completed"
+                self.location = self._mission["goal"]
+            elif state == "ABORTED":
+                self._mission["status"] = "failed"
+                self._mission = None
+            else:   # REJECTED, PREEMPTED, RECALLED
+                self._mission["status"] = "aborted"
+                self._mission = None
+            self.dirty = True
+
+    # Thread: ros
+    def _on_diagnostics(self, msg):
+        with self.lock:
+            if self.status == "offline":
+                self.status = "lost"
+                self.dirty = True
+
+
+###############################################################################
+# Fake Manager
+###############################################################################
+
+class FakeRobotManager(RobotManager):
+    def __init__(self):
+        RobotManager.__init__(self)
+        self.robot = FakeRobot(self.world)
+        self.navigating = -1
+        self.navi_status = ["SUCCEEDED", "ABORTED"]
+
+    def start(self, host = "localhost", port = 80, ws_port = 8080,
+              data_dir = os.getcwd()):
+        self.world.read_from(data_dir)
+        self._start_servers(host, port, ws_port, data_dir)
+        self.robot.init_ros()
+        try:
+            while True:
+                time.sleep(1)
+                if self.robot.simulate_online:
+                    self.robot.simulate_online = False
+                    self.robot._on_diagnostics(None)
+                if self.robot.move_base.cancelled:
+                    self.robot.move_base.cancelled = False
+                    self.navigating = -1
+                    self.robot._on_move_done("PREEMPTED", None)
+                elif self.navigating > 0:
+                    self.navigating -= 1
+                elif self.navigating == 0:
+                    self.navigating = -1
+                    status = self.navi_status[randint(0, 1)]
+                    self.robot._on_move_done(status, None)
+                elif self.robot.move_goal_set:
+                    self.robot.move_goal_set = False
+                    self.robot._on_move_active()
+                    self.navigating = 7
+        except KeyboardInterrupt as e:
+            pass
+        finally:
+            self.shutdown()
+
+
+
+###############################################################################
+# Main Executable
+###############################################################################
+
+if __name__ == '__main__':
+    s = FakeRobotManager()
+    s.start()
