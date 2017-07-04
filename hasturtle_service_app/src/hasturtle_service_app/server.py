@@ -29,7 +29,7 @@
 """
 Websocket messages:
 S {
-    "status":       string ("offline", "idle", "busy", "planning"),
+    "status":       string ("offline", "idle", "busy", "planning", "lost"),
     "location":     string,
     "mission":  ?{
         "location": string,
@@ -38,6 +38,9 @@ S {
         "status":   string ("in progress", "completed",
                             "successful", "failed", "aborted")
     }
+}
+C {
+    "hint":         string
 }
 C {
     "goal":         string
@@ -68,7 +71,8 @@ import rospy
 import actionlib
 
 from actionlib_msgs.msg import GoalStatus
-from geometry_msgs.msg import Pose, Point, Quaternion
+from diagnostic_msgs.msg import DiagnosticArray
+from geometry_msgs.msg import Pose, Point, Quaternion, PoseWithCovarianceStamped
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 
 # https://github.com/dpallot/simple-websocket-server
@@ -143,6 +147,9 @@ class TurtleSocketHandler(WebSocket):
             elif "feedback" in data:
                 print "received mission feedback", data["feedback"]
                 self.server.robot.set_user_feedback(data["feedback"])
+            elif "hint" in data:
+                print "received initial pose", data["hint"]
+                self.server.robot.set_location_hint(data["hint"])
         except RobotStatusError as e:
             print e.message
         message = json.dumps(self.server.robot.get_state())
@@ -184,6 +191,12 @@ class TurtleSocketServer(SimpleWebSocketServer):
 ###############################################################################
 
 class Robot(object):
+    COVARIANCE = [0.25, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                  0.25, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                  0.0,  0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                  0.0,  0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                  0.0,  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.06853891945200942]
+
     def __init__(self, world):
         self.lock = Lock()
         self.status = "offline"
@@ -194,8 +207,11 @@ class Robot(object):
     # -- NOTE: I think we do not need to send all state updates to the client
     # -- so we just need a flag telling whether the client needs an update
         self.dirty = False
+    # -- ROS stuff
         self.move_base = None
+        self.diagnostics = None # used to check whether the robot is online
 
+    # Thread: websocket
     def get_state(self):
         state = None
         with self.lock:
@@ -206,6 +222,7 @@ class Robot(object):
             }
         return state
 
+    # Thread: websocket
     def get_dirty_state(self):
         state = None
         with self.lock:
@@ -218,10 +235,8 @@ class Robot(object):
                 self.dirty = False
         return state
 
+    # Thread: websocket
     def set_mission(self, goal):
-        """status can be one of
-            {"in progress", "completed", "successful", "failed", "aborted"}
-        """
         with self.lock:
             self._check_status("idle")
             if goal == self.location or not goal in self.world:
@@ -235,6 +250,18 @@ class Robot(object):
             self.status = "planning"
         self._go_to(self.world.get(goal))
 
+    # Thread: websocket
+    def set_location_hint(self, location):
+        with self.lock:
+            self._check_status("lost")
+            if not location in self.world:
+                return
+            self.location = location
+            location = self.world.get(location)
+            self.status = "idle"
+        self._set_location(location)
+
+    # Thread: websocket
     def set_user_feedback(self, feedback):
         with self.lock:
             if feedback == "cancel":
@@ -258,16 +285,22 @@ class Robot(object):
                 self._mission["status"] = "failed"
                 self._mission = None
 
+    # Thread: ros
     def init_ros(self):
         self.move_base = actionlib.SimpleActionClient("move_base", MoveBaseAction)
         self.move_base.wait_for_server()
+        self.initial_pose = rospy.Publisher("initialpose",
+                                            PoseWithCovarianceStamped,
+                                            queue_size = 10, latch = True)
+        with self.lock:
+            if self.status == "offline":
+                self.diagnostics = rospy.Subscriber("diagnostics",
+                                                    DiagnosticArray,
+                                                    self._on_diagnostics)
         
-        # pub = rospy.Publisher("initialpose", String, queue_size=10)
-        # initialpose (geometry_msgs/PoseWithCovarianceStamped)
-        # http://wiki.ros.org/amcl
-
         # sub amcl_pose (geometry_msgs/PoseWithCovarianceStamped)
 
+    # Thread: ros
     def shutdown(self):
         if self._mission and self._mission["status"] == "in progress":
             self.move_base.cancel_all_goals()
@@ -288,6 +321,22 @@ class Robot(object):
             raise RobotStatusError("expected mission status " + status
                                    + "; found " + self._mission["status"])
 
+    # Thread: websocket
+    def _set_location(self, location):
+        hint = PoseWithCovarianceStamped()
+        hint.header.frame_id = "map"
+        hint.header.stamp = rospy.Time.now()
+        hint.pose.pose.position.x = location.x
+        hint.pose.pose.position.y = location.y
+        hint.pose.pose.position.z = 0.0
+        hint.pose.pose.orientation.x = 0.0
+        hint.pose.pose.orientation.y = 0.0
+        hint.pose.pose.orientation.z = location.orientation[2]
+        hint.pose.pose.orientation.w = location.orientation[3]
+        hint.pose.covariance = Robot.COVARIANCE
+        self.initial_pose.publish(hint)
+
+    # Thread: websocket
     def _go_to(self, location):
         position = location.to_position(Point)
         quaternion = location.to_quaternion(Quaternion)
@@ -299,20 +348,26 @@ class Robot(object):
                                  active_cb = self._on_move_active,
                                  feedback_cb = self._on_move_feedback)
 
+    # Thread: ros
     def _on_move_active(self):
         with self.lock:
             self.missions.append(self._mission)
             self.status = "busy"
             self.dirty = True
 
+    # Thread: ros
     def _on_move_feedback(self, msg):
         x = msg.base_position.pose.position.x
         y = msg.base_position.pose.position.y
         w = msg.base_position.pose.orientation.w
-        # check if coordinates fit a new location
         with self.lock:
-            pass
+            location = self.location
+            self.location = self.world.where_is(x, y)
+            if self.location != location:
+                self.dirty = True
+                # do not risk setting a True to False by direct assignment
 
+    # Thread: ros
     def _on_move_done(self, state, msg):
         with self.lock:
             self.status = "idle"
@@ -328,6 +383,15 @@ class Robot(object):
                 self._mission = None
             self.dirty = True
 
+    # Thread: ros
+    def _on_diagnostics(self, msg):
+        with self.lock:
+            if self.status == "offline":
+                self.status = "lost"
+                self.dirty = True
+            self.diagnostics.unregister()
+            self.diagnostics = None
+
 
 ###############################################################################
 # Location Data
@@ -340,7 +404,13 @@ class Location(object):
         self.x      = data["position"]["x"]
         self.y      = data["position"]["y"]
         self.radius = data["radius"]
-        self.orientation = tuple(data.get("orientation", (0.0, 0.0, 0.0, 1.0)))
+        orientation = data.get("orientation")
+        if orientation:
+            self.orientation = (orientation.get("x", 0.0),
+                                orientation.get("y", 0.0),
+                                orientation.get("z", 0.0), orientation["w"])
+        else:
+            self.orientation = (0.0, 0.0, 0.0, 1.0)
 
     def to_position(self, cls):
         return cls(self.x, self.y, 0.0)
