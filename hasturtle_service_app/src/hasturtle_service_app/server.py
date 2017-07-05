@@ -33,6 +33,9 @@ S {
                             "successful", "failed", "aborted")
     }
 }
+S {
+    "error":        string
+}
 C {
     "hint":         string
 }
@@ -130,21 +133,28 @@ class TurtleHTTPServer(HTTPServer):
 
 class TurtleSocketHandler(WebSocket):
     def handleMessage(self):
+        message = None
         data = json.loads(self.data)
         try:
             if "goal" in data:
-                print "received a new goal", data["goal"]
+                print "[Server] received a new goal", data["goal"]
                 self.server.robot.set_mission(data["goal"])
             elif "feedback" in data:
-                print "received mission feedback", data["feedback"]
+                print "[Server] received mission feedback", data["feedback"]
                 self.server.robot.set_user_feedback(data["feedback"])
             elif "hint" in data:
-                print "received initial pose", data["hint"]
+                print "[Server] received initial pose", data["hint"]
                 self.server.robot.set_location_hint(data["hint"])
         except RobotStatusError as e:
-            print e.message
-        message = json.dumps(self.server.robot.get_state())
-        self.sendMessage(unicode(message))
+            message = json.dumps({ "error": e.message })
+        except ValueError as e:
+            message = json.dumps({ "error": e.message })
+        if message:
+            self.sendMessage(unicode(message))
+    # -- NOTE: it is more logical and less error prone to just
+    # -- use the dirty flag, instead of changing state in two places
+        # message = json.dumps(self.server.robot.get_state())
+        # self.sendMessage(unicode(message))
 
     def handleConnected(self):
         print "CONNECTED", self.address

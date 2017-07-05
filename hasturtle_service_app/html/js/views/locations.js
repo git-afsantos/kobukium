@@ -61,8 +61,11 @@ THE SOFTWARE.
         },
 
         onSelection: function (event) {
-            this.robot.setMission($(event.currentTarget).data("modelid"));
-            this.hide();
+            var goal = $(event.currentTarget).data("modelid");
+            if (goal != this.robot.get("location")) {
+                this.robot.setMission(goal);
+                this.hide();
+            }
         }
     });
 })();

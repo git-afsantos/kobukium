@@ -100,7 +100,11 @@ THE SOFTWARE.
 
         onMessage: function (event) {
             var attributes = JSON.parse(event.data);
-            this.set(attributes);
+            if ("error" in attributes) {
+                this.trigger("error", this, attributes);
+            } else {
+                this.set(attributes);
+            }
         },
 
         onError: function (event) {

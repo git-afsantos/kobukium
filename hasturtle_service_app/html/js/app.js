@@ -60,6 +60,7 @@ THE SOFTWARE.
             el: $("#robot-status-board"),
             $mission: $("#mission-status-board"),
             model: App.robot,
+            locations: App.locations,
             router: App.router
         });
         App.locationBoard = new App.Views.LocationBoard({

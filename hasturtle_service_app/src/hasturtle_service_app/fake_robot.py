@@ -49,6 +49,7 @@ class Robot(object):
         self.location = None
         self.world = world
         self.missions = []
+        self.current_mission = None
         self._mission = None
         self.dirty = False
         self.move_base = None
@@ -65,7 +66,8 @@ class Robot(object):
             state = {
                 "status":   self.status,
                 "location": self.location,
-                "mission":  dict(self._mission) if self._mission else None
+                "mission":  (dict(self.current_mission)
+                             if self.current_mission else None)
             }
         return state
 
@@ -77,7 +79,8 @@ class Robot(object):
                 state = {
                     "status":   self.status,
                     "location": self.location,
-                    "mission":  dict(self._mission) if self._mission else None
+                    "mission":  (dict(self.current_mission)
+                                 if self.current_mission else None)
                 }
                 self.dirty = False
         return state
@@ -86,8 +89,8 @@ class Robot(object):
     def set_mission(self, goal):
         with self.lock:
             self._check_status("idle")
-            if goal == self.location or not goal in self.world:
-                return
+            if not goal in self.world:
+                raise ValueError("The selected location is not valid!")
             self._mission = {
                 "location": self.location,
                 "time":     datetime.now().strftime(TIME_FORMAT),
@@ -95,6 +98,7 @@ class Robot(object):
                 "status":   "in progress"
             }
             self.status = "planning"
+            self.dirty = True
         self._go_to(self.world.get(goal))
 
     # Thread: websocket
@@ -102,10 +106,11 @@ class Robot(object):
         with self.lock:
             self._check_status("lost")
             if not location in self.world:
-                return
+                raise ValueError("The selected location is not valid!")
             self.location = location
             location = self.world.get(location)
             self.status = "idle"
+            self.dirty = True
         self._set_location(location)
 
     # Thread: websocket
@@ -114,23 +119,22 @@ class Robot(object):
             if feedback == "cancel":
                 self._check_status("busy")
                 self._check_mission_status("in progress")
-                print "cancelled current mission"
+                print "[FakeRobot] cancelled current mission"
                 self.goal_cancelled = True
-                self.status = "idle"
-                self._mission["status"] = "aborted"
-                self._mission = None
             elif feedback == "success":
                 self._check_status("idle")
                 self._check_mission_status("completed")
-                print "recording positive mission feedback"
-                self._mission["status"] = "successful"
-                self._mission = None
+                print "[FakeRobot] recording positive mission feedback"
+                self.current_mission["status"] = "successful"
+                self.current_mission = None
+                self.dirty = True
             elif feedback == "failure":
                 self._check_status("idle")
                 self._check_mission_status("completed")
-                print "recording negative mission feedback"
-                self._mission["status"] = "failed"
-                self._mission = None
+                print "[FakeRobot] recording negative mission feedback"
+                self.current_mission["status"] = "failed"
+                self.current_mission = None
+                self.dirty = True
 
     # Thread: ros
     def init_ros(self):
@@ -139,7 +143,8 @@ class Robot(object):
 
     # Thread: ros
     def shutdown(self):
-        if self._mission and self._mission["status"] == "in progress":
+        if (self.current_mission
+                and self.current_mission["status"] == "in progress"):
             self.goal_cancelled = True
 
     # Thread: ros
@@ -151,23 +156,24 @@ class Robot(object):
         try:
             while True:
                 time.sleep(1)
-                if self.simulate_online:
-                    self.simulate_online = False
-                    self._on_diagnostics(None)
-                if self.goal_cancelled:
-                    self.goal_cancelled = False
-                    self.navigating = -1
-                    self._on_move_done("PREEMPTED", None)
-                elif self.navigating > 0:
-                    self.navigating -= 1
-                elif self.navigating == 0:
-                    self.navigating = -1
-                    status = self.navi_status[randint(0, 1)]
-                    self._on_move_done(status, None)
-                elif self.move_goal_set:
-                    self.move_goal_set = False
-                    self._on_move_active()
-                    self.navigating = 7
+                with self.lock:
+                    if self.simulate_online:
+                        self.simulate_online = False
+                        self._on_diagnostics()
+                    if self.goal_cancelled:
+                        self.goal_cancelled = False
+                        self.navigating = -1
+                        self._on_move_done("PREEMPTED")
+                    elif self.navigating > 0:
+                        self.navigating -= 1
+                    elif self.navigating == 0:
+                        self.navigating = -1
+                        status = self.navi_status[randint(0, 1)]
+                        self._on_move_done(status)
+                    elif self.move_goal_set:
+                        self.move_goal_set = False
+                        self._on_move_active()
+                        self.navigating = 7
         except KeyboardInterrupt as e:
             return False
         return True
@@ -179,14 +185,14 @@ class Robot(object):
 
     def _check_mission_status(self, status):
         if status is None:
-            if not self._mission is None:
+            if not self.current_mission is None:
                 raise RobotStatusError("expected not to have a mission")
             return
-        if self._mission is None:
+        if self.current_mission is None:
             raise RobotStatusError("expected to have a mission")
-        if status != self._mission["status"]:
+        if status != self.current_mission["status"]:
             raise RobotStatusError("expected mission status " + status
-                                   + "; found " + self._mission["status"])
+                                   + "; found " + self.current_mission["status"])
 
     # Thread: websocket
     def _set_location(self, location):
@@ -194,42 +200,41 @@ class Robot(object):
 
     # Thread: websocket
     def _go_to(self, location):
-        print "[FakeRobot] publishing move base goal", location
+        print "[FakeRobot] publishing move base goal", location.name
         self.move_goal_set = True
 
     # Thread: ros
     def _on_move_active(self):
-        with self.lock:
-            self.missions.append(self._mission)
-            self.status = "busy"
-            self.dirty = True
+        self.missions.append(self._mission)
+        self.current_mission = self._mission
+        self._mission = None    # candidate graduates
+        self.status = "busy"
+        self.dirty = True
 
     # Thread: ros
     def _on_move_feedback(self, msg):
         pass
 
     # Thread: ros
-    def _on_move_done(self, state, msg):
-        with self.lock:
-            self.status = "idle"
-            self._mission["completed"] = datetime.now().strftime(TIME_FORMAT)
-            if state == "SUCCEEDED":
-                self._mission["status"] = "completed"
-                self.location = self._mission["goal"]
-            elif state == "ABORTED":
-                self._mission["status"] = "failed"
-                self._mission = None
-            else:   # REJECTED, PREEMPTED, RECALLED
-                self._mission["status"] = "aborted"
-                self._mission = None
-            self.dirty = True
+    def _on_move_done(self, state):
+        self.status = "idle"
+        self.current_mission["completed"] = datetime.now().strftime(TIME_FORMAT)
+        if state == "SUCCEEDED":
+            self.current_mission["status"] = "completed"
+            self.location = self.current_mission["goal"]
+        elif state == "ABORTED":
+            self.current_mission["status"] = "failed"
+            self.current_mission = None
+        else:   # REJECTED, PREEMPTED, RECALLED
+            self.current_mission["status"] = "aborted"
+            self.current_mission = None
+        self.dirty = True
 
     # Thread: ros
-    def _on_diagnostics(self, msg):
-        with self.lock:
-            if self.status == "offline":
-                self.status = "lost"
-                self.dirty = True
+    def _on_diagnostics(self):
+        if self.status == "offline":
+            self.status = "lost"
+            self.dirty = True
 
 
 ###############################################################################

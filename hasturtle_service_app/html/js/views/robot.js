@@ -32,6 +32,7 @@ THE SOFTWARE.
 
         initialize: function (options) {
             this.router = options.router;
+            this.locations = options.locations;
 
             this.$status = this.$("#robot-status-tag");
             this.$location = this.$("#robot-location-tag");
@@ -47,6 +48,7 @@ THE SOFTWARE.
             };
 
             this.listenTo(this.model, "change", this.onUpdate);
+            this.listenTo(this.model, "error", this.onError);
         },
 
         render: function () {
@@ -71,15 +73,15 @@ THE SOFTWARE.
         onUpdate: function (robot) {
             var status = robot.get("status"),
                 mission = robot.get("mission");
-            this.strings.robotLocation = robot.get("location")
-                                         || "Unknown Location";
+            this.strings.robotLocation = this._locname(robot.get("location"));
             if (mission == null) {
                 this.strings.missionStatus = "Available for Missions";
                 this.strings.currentMission = "[no target selected]";
             } else {
                 this.strings.missionStatus = "Mission " + mission.status;
-                this.strings.currentMission = "From " + mission.location
-                                              + " to " + mission.goal;
+                this.strings.currentMission =
+                        "From " + this._locname(mission.location)
+                        + " to " + this._locname(mission.goal);
             }
             if (status == "offline") {
                 this.strings.robotStatus = "Offline";
@@ -107,6 +109,11 @@ THE SOFTWARE.
             this.render();
         },
 
+        onError: function (robot, response) {
+            alert(response.error);
+            this.onUpdate(robot);
+        },
+
         getRoute: function () {
             var status = this.model.get("status"),
                 mission = this.model.get("mission");
@@ -122,6 +129,14 @@ THE SOFTWARE.
                 }
             }
             return "locations";
+        },
+
+        _locname: function (id) {
+            if (id) {
+                return this.locations.get(id).get("name");
+            } else {
+                return "Unspecified Location";
+            }
         }
     });
 })();
