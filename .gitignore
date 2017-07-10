@@ -1,4 +1,5 @@
-img/reference.png
-img/turtlebot.xcf
+**/img/reference.png
+**/img/turtlebot.xcf
 **/*.pyc
 **/html/data
+**/hasturtle_service_app/__main__.py

@@ -2,7 +2,7 @@
 <package>
   <name>kobuki_noros</name>
   <version>0.0.1</version>
-  <description>kobuki_noros provides a small server that accepts commands via socket and forwards to the proper ROS topics.</description>
+  <description>kobuki_noros provides a small server that accepts commands via socket and forwards to the proper ROS topics. It also provides a programmable interface to control Kobuki with simple non-ROS commands.</description>
 
   <maintainer email="andre.f.santos@inesctec.pt">André Santos</maintainer>
 
