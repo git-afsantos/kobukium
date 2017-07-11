@@ -58,11 +58,12 @@ class Robot(object):
 
     # Thread: subscriber
     def set_odometry(self, x, y, a):
+        if a < 0:
+            a += 2 * pi
         with self.lock:
-            self.translation += sqrt((x - self.x)**2 + (y - self.y)**2)
-            if a < 0:
-                a += 2 * pi
-            self.rotation += a - self.a
+            if not (self.bump_center or self.bump_left or self.bump_right):
+                self.translation += sqrt((x - self.x)**2 + (y - self.y)**2)
+                self.rotation += a - self.a
             self.x = x
             self.y = y
             self.a = a
