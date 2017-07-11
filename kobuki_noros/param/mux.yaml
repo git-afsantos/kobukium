@@ -14,13 +14,18 @@ subscribers:
     timeout:     0.2
     priority:    7
     short_desc:  "Kobuki's keyboard operation"
-  - name:        "NoROS Talker"
-    topic:       "talker"
+  - name:        "NoROS Voice"
+    topic:       "voice"
     timeout:     1.0
     priority:    5
     short_desc:  "Voice commands for Kobuki"
-  - name:        "NoROS Whistle"
-    topic:       "whistle"
+  - name:        "NoROS Musical"
+    topic:       "music"
     timeout:     1.0
     priority:    5
-    short_desc:  "Whistle commands for Kobuki"
+    short_desc:  "Musical tone commands for Kobuki"
+  - name:        "NoROS API"
+    topic:       "api"
+    timeout:     1.0
+    priority:    6
+    short_desc:  "Programmable non-ROS commands for Kobuki"

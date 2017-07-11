@@ -118,7 +118,7 @@ class Publisher(object):
 
     def spin(self):
         rate    = rospy.Rate(0.2)
-        cmd_vel = rospy.Publisher("cmd_vel_mux/keyop", Twist, queue_size = 10)
+        cmd_vel = rospy.Publisher("cmd_vel", Twist, queue_size = 10)
         self.set_twist(0.0, 0.0)
         self.init(self)
         while not self.shutdown:
