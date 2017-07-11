@@ -24,7 +24,7 @@ import imp
 import sys
 from kobuki_noros.programmable import RobotController
 
-if len(sys.argv) != 2:
+if len(sys.argv) < 2:
     print "[ERROR] You need to specify the path to the imported module."
     sys.exit()
 

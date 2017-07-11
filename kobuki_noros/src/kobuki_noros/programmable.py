@@ -30,11 +30,20 @@ from kobuki_msgs.msg import BumperEvent
 from nav_msgs.msg import Odometry
 from tf.transformations import euler_from_quaternion
 
-LINEAR  = 0.3   # m/s
-ANGULAR = 0.785 # rad/s
+PI2     = 2 * pi
+LINEAR  = 0.25  # m/s
+ANGULAR = pi/4  # rad/s
 
 def skip(robot):
     pass
+
+
+def angle_distance(alpha, beta):
+    d = alpha - beta
+    s = 1 if (d >= 0.0 and d <= pi) or (d <= -pi and d >= -PI2) else -1
+    d = abs(d) % PI2
+    r = PI2 - d if d > pi else d
+    return r * s
 
 ###############################################################################
 #   Robot State
@@ -58,12 +67,10 @@ class Robot(object):
 
     # Thread: subscriber
     def set_odometry(self, x, y, a):
-        if a < 0:
-            a += 2 * pi
         with self.lock:
             if not (self.bump_center or self.bump_left or self.bump_right):
                 self.translation += sqrt((x - self.x)**2 + (y - self.y)**2)
-                self.rotation += a - self.a
+                self.rotation += angle_distance(a, self.a)
             self.x = x
             self.y = y
             self.a = a
@@ -117,7 +124,7 @@ class Publisher(object):
         self.thread.start()
 
     def spin(self):
-        rate    = rospy.Rate(0.2)
+        rate    = rospy.Rate(5)
         cmd_vel = rospy.Publisher("cmd_vel", Twist, queue_size = 10)
         self.set_twist(0.0, 0.0)
         self.init(self)
@@ -177,7 +184,7 @@ class Publisher(object):
 class RobotController(object):
     def __init__(self, callbacks):
         self.robot = Robot()
-        self.publisher = Publisher(robot, callbacks)
+        self.publisher = Publisher(self.robot, callbacks)
         self.odom = None
         self.bump = None
         self.odom_callback = self._on_first_odom
@@ -203,7 +210,8 @@ class RobotController(object):
     def _on_odom(self, msg):
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
-        (roll, pitch, yaw) = euler_from_quaternion(msg.pose.pose.orientation)
+        q = msg.pose.pose.orientation
+        (roll, pitch, yaw) = euler_from_quaternion((q.x, q.y, q.z, q.w))
         self.odom_callback(x, y, yaw)
 
     def _on_first_odom(self, x, y, a):
