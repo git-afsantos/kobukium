@@ -19,17 +19,28 @@
 #OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 #THE SOFTWARE.
 
-import math
+from math import pi, cos, sin, sqrt, isnan, degrees
 import pygame as pg
 import sys
 
-
+TWO_PI = 2 * pi
+PI_2 = pi / 2
+PI_6 = pi / 6
 TILE_SIZE = 32
 ARENA_WIDTH = 6
 ARENA_HEIGHT = 9
+LINEAR  = 0.25  # m/s
+ANGULAR = pi/4  # rad/s
 
 def skip(robot):
     pass
+
+def angle_distance(alpha, beta):
+    d = alpha - beta
+    s = 1 if (d >= 0.0 and d <= pi) or (d <= -pi and d >= -TWO_PI) else -1
+    d = abs(d) % TWO_PI
+    r = TWO_PI - d if d > pi else d
+    return r * s
 
 
 class Spritesheet(object):
@@ -149,7 +160,7 @@ class Odometry(object):
 
     @property
     def moved(self):
-        return math.sqrt((self.x - self._x)**2 + (self.y - self._y)**2)
+        return sqrt((self.x - self._x)**2 + (self.y - self._y)**2)
 
     @property
     def has_moved(self):
@@ -173,12 +184,7 @@ class Odometry(object):
 
     @property
     def rotated(self):
-        a = self.a - self._a
-        while a > math.pi:
-            a -= 2 * math.pi
-        while a < -math.pi:
-            a += 2 * math.pi
-        return a
+        return angle_distance(self.a, self._a)
 
     @property
     def has_rotated(self):
@@ -198,15 +204,15 @@ class Odometry(object):
         self._a = self.a
         self._vx = self.vx
         self._wz = self.wz
-        self.x += dr * math.cos(self.a)
-        self.y += dr * math.sin(-self.a)
+        self.x += dr * cos(self.a)
+        self.y += dr * sin(-self.a)
         self.a += da
         self.vx = dr / dt
         self.wz = da / dt
-        while self.a > math.pi:
-            self.a -= 2 * math.pi
-        while self.a < -math.pi:
-            self.a += 2 * math.pi
+        while self.a > pi:
+            self.a -= TWO_PI
+        while self.a < -pi:
+            self.a += TWO_PI
 
     def snap_x(self, x):
         self.x = x
@@ -252,9 +258,9 @@ class DifferentialDrive(object):
     def get_odom_velocity(self, dt):
         d1 = dt * self.wheel_radius * (self.cmd_left / self.wheel_radius)
         d2 = dt * self.wheel_radius * (self.cmd_right / self.wheel_radius)
-        if math.isnan(d1):
+        if isnan(d1):
             d1 = 0.0
-        if math.isnan(d2):
+        if isnan(d2):
             d2 = 0.0
         dr = (d1 + d2) / 2
         da = (d2 - d1) / self.wheel_separation
@@ -302,34 +308,34 @@ class Bumper(object):
         self.right  = False
 
     def from_angle(self, a, b = None):
-        while a > math.pi:
-            a -= 2 * math.pi
-        while a < -math.pi:
-            a += 2 * math.pi
+        while a > pi:
+            a -= TWO_PI
+        while a < -pi:
+            a += TWO_PI
         if not b is None:
-            while b > math.pi:
-                b -= 2 * math.pi
-            while b < -math.pi:
-                b += 2 * math.pi
-        if a < -math.pi / 2 or a > math.pi / 2:
+            while b > pi:
+                b -= TWO_PI
+            while b < -pi:
+                b += TWO_PI
+        if a < -PI_2 or a > PI_2:
             if b is None:
                 return self.release()
             return self.from_angle(b)
-        if not b is None and (b < -math.pi / 2 or b > math.pi / 2):
+        if not b is None and (b < -PI_2 or b > PI_2):
             b = None
         c = False
         l = False
         r = False
-        if a < -math.pi/6:
+        if a < -PI_6:
             r = True
-        elif a > math.pi/6:
+        elif a > PI_6:
             l = True
         else:
             c = True
         if not b is None:
-            if b < -math.pi/6:
+            if b < -PI_6:
                 r = True
-            elif b > math.pi/6:
+            elif b > PI_6:
                 l = True
             else:
                 c = True
@@ -383,7 +389,7 @@ class Robot(pg.sprite.Sprite):
 
     def draw(self, screen):
         if self.odom.has_rotated:
-            angle = math.degrees(self.odom.a)
+            angle = degrees(self.odom.a)
             original = self.sprites.sprite
             self.image = pg.transform.rotate(original, angle)
             self.rect = self.image.get_rect(center = original.get_rect().center)
@@ -409,7 +415,7 @@ class Robot(pg.sprite.Sprite):
             self.image.fill((0, 0, 0))
             self.rect = self.image.get_rect()
         else:
-            angle = math.degrees(self.odom.a)
+            angle = degrees(self.odom.a)
             self.image = pg.transform.rotate(image, angle)
             self.rect = self.image.get_rect(center = image.get_rect().center)
         self.rect.centerx = int(self.odom.xcm)
@@ -430,37 +436,37 @@ class Robot(pg.sprite.Sprite):
             if cl:
                 self.odom.snap_xy((arena.x_right(x1) + self.r) / 100.0,
                                   (arena.y_below(y1) + self.r) / 100.0)
-                self.bumper.from_angle(math.pi/2 - self.odom.a,
-                                       b = math.pi - self.odom.a)
+                self.bumper.from_angle(PI_2 - self.odom.a,
+                                       b = pi - self.odom.a)
             elif cr:
                 self.odom.snap_xy((arena.x_left(x2) - self.r) / 100.0,
                                   (arena.y_below(y1) + self.r) / 100.0)
-                self.bumper.from_angle(math.pi/2 - self.odom.a,
+                self.bumper.from_angle(PI_2 - self.odom.a,
                                        b = -self.odom.a)
             else:
                 if self.odom.has_moved_up:
                     self.odom.snap_y((arena.y_below(y1) + self.r) / 100.0)
-                self.bumper.from_angle(math.pi/2 - self.odom.a)
+                self.bumper.from_angle(PI_2 - self.odom.a)
         elif cd:
             if cl:
                 self.odom.snap_xy((arena.x_right(x1) + self.r) / 100.0,
                                   (arena.y_above(y2) - self.r) / 100.0)
-                self.bumper.from_angle(-math.pi/2 - self.odom.a,
-                                       b = math.pi - self.odom.a)
+                self.bumper.from_angle(-PI_2 - self.odom.a,
+                                       b = pi - self.odom.a)
             elif cr:
                 self.odom.snap_xy((arena.x_left(x2) - self.r) / 100.0,
                                   (arena.y_above(y2) - self.r) / 100.0)
-                self.bumper.from_angle(-math.pi/2 - self.odom.a,
+                self.bumper.from_angle(-PI_2 - self.odom.a,
                                        b = -self.odom.a)
             else:
                 if self.odom.has_moved_down:
                     self.odom.snap_y((arena.y_above(y2) - self.r) / 100.0)
-                self.bumper.from_angle(-math.pi/2 - self.odom.a)
+                self.bumper.from_angle(-PI_2 - self.odom.a)
         else:
             if cl:
                 if self.odom.has_moved_left:
                     self.odom.snap_x((arena.x_right(x1) + self.r) / 100.0)
-                self.bumper.from_angle(math.pi - self.odom.a)
+                self.bumper.from_angle(pi - self.odom.a)
             elif cr:
                 if self.odom.has_moved_right:
                     self.odom.snap_x((arena.x_left(x2) - self.r) / 100.0)
@@ -576,17 +582,17 @@ class UserController(object):
             self.bump_right(self)
 
     def andar(self, meters):
-        self.vx = 0.3
+        self.vx = LINEAR
         self.wz = 0.0
         self.to_walk = meters
 
     def rodar(self, radians):
         self.vx = 0.0
         if radians > 0:
-            self.wz = 0.785
+            self.wz = ANGULAR
             self.to_rotate = radians
         elif radians < 0:
-            self.wz = -0.785
+            self.wz = -ANGULAR
             self.to_rotate = -radians
 
 
