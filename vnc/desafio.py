@@ -5,9 +5,9 @@ import solucao
 
 WIDTH = 9
 HEIGHT = 5
-OX = 1.0
+OX = 0.5
 OY = 1.0
-OBSTACLES = [(0, 4)]
+OBSTACLES = [(2, 4), (3, 4), (4, 4), (0, 7), (1, 7), (2, 7)]
 
 simulator.run(width = WIDTH, height = HEIGHT, ox = OX, oy = OY, obstacles = OBSTACLES,
               callbacks = {

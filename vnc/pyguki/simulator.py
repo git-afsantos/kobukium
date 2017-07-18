@@ -555,6 +555,9 @@ class UserController(object):
         self.bump_right     = callbacks.get("bump_right",   skip)
         self.walk_done      = callbacks.get("walk_done",    skip)
         self.rotate_done    = callbacks.get("rotate_done",  skip)
+        self._center        = False
+        self._left          = False
+        self._right         = False
 
     def update(self, dt):
         if self.enabled:
@@ -574,12 +577,19 @@ class UserController(object):
                     self.wz = 0.0
                     self.rotate_done(self)
                 self.robot.drive.set_velocity_commands(self.vx, self.wz)
-        if self.robot.bumper.center:
+        if self.robot.bumper.center and not self._center:
+            self._center = True
             self.bump_center(self)
-        elif self.robot.bumper.left:
+        elif self.robot.bumper.left and not self._left:
+            self._left = True
             self.bump_left(self)
-        elif self.robot.bumper.right:
+        elif self.robot.bumper.right and not self._right:
+            self._right = True
             self.bump_right(self)
+        elif not self.robot.bumper.active:
+            self._center = False
+            self._left   = False
+            self._right  = False
 
     def andar(self, meters):
         self.vx = LINEAR
