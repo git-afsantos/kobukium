@@ -34,10 +34,6 @@ PI2     = 2 * pi
 LINEAR  = 0.25  # m/s
 ANGULAR = pi/4  # rad/s
 
-def skip(robot):
-    pass
-
-
 def angle_distance(alpha, beta):
     d = alpha - beta
     s = 1 if (d >= 0.0 and d <= pi) or (d <= -pi and d >= -PI2) else -1
@@ -108,15 +104,17 @@ class Publisher(object):
         self.robot      = robot
         self.to_walk    = 0.0
         self.to_rotate  = 0.0
+        self.commands   = []
+        self.contador   = 0
         self.thread     = None
         self.twist      = None
         self.shutdown   = False
-        self.init           = callbacks.get("init",         skip)
-        self.bump_center    = callbacks.get("bump_center",  skip)
-        self.bump_left      = callbacks.get("bump_left",    skip)
-        self.bump_right     = callbacks.get("bump_right",   skip)
-        self.walk_done      = callbacks.get("walk_done",    skip)
-        self.rotate_done    = callbacks.get("rotate_done",  skip)
+        self.init           = callbacks.get("init")         or self.skip
+        self.bump_center    = callbacks.get("bump_center")  or self.skip
+        self.bump_left      = callbacks.get("bump_left")    or self.skip
+        self.bump_right     = callbacks.get("bump_right")   or self.skip
+        self.walk_done      = callbacks.get("walk_done")    or self.skip
+        self.rotate_done    = callbacks.get("rotate_done")  or self.skip
 
     def start(self):
         self.thread = Thread(target = self.spin)
@@ -162,18 +160,51 @@ class Publisher(object):
         self.twist.angular.y = 0
         self.twist.angular.z = wz
 
+    def skip(self, robot):
+        if self.commands:
+            cmd, val = self.commands.pop(0)
+            cmd(val)
+        else:
+            self.terminar()
+
 
     def andar(self, meters):
         self.to_walk = meters
+        self.to_rotate = 0.0
         self.set_twist(LINEAR, 0.0)
 
     def rodar(self, radians):
+        self.to_walk = 0.0
         if radians > 0:
             self.to_rotate = radians
             self.set_twist(0.0, ANGULAR)
         elif radians < 0:
             self.to_rotate = -radians
             self.set_twist(0.0, -ANGULAR)
+
+    def executar_depois(self, cmd, value):
+        self.commands.append((getattr(self, cmd), value))
+
+    def cancelar_comando(self):
+        if self.to_walk > 0.0 or self.to_rotate > 0.0:
+            self.to_walk = 0.0
+            self.to_rotate = 0.0
+            self.set_twist(0.0, 0.0)
+            if self.commands:
+                cmd, val = self.commands.pop(0)
+                cmd(val)
+
+    def conta(self):
+        self.contador += 1
+
+    def desconta(self):
+        self.contador -= 1
+
+    def terminar(self):
+        self.to_walk = 0.0
+        self.to_rotate = 0.0
+        self.set_twist(0.0, 0.0)
+        self.shutdown = True
 
 
 

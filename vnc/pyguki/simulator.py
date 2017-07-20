@@ -19,6 +19,7 @@
 #OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 #THE SOFTWARE.
 
+import time
 from math import pi, cos, sin, sqrt, isnan, degrees
 import pygame as pg
 import sys
@@ -31,9 +32,6 @@ ARENA_WIDTH = 6
 ARENA_HEIGHT = 9
 LINEAR  = 0.25  # m/s
 ANGULAR = pi/4  # rad/s
-
-def skip(robot):
-    pass
 
 def angle_distance(alpha, beta):
     d = alpha - beta
@@ -421,6 +419,14 @@ class Robot(pg.sprite.Sprite):
         self.rect.centerx = int(self.odom.xcm)
         self.rect.centery = int(self.odom.ycm)
 
+    def update_image(self):
+        image = self.sprites.sprite
+        angle = degrees(self.odom.a)
+        self.image = pg.transform.rotate(image, angle)
+        self.rect = self.image.get_rect(center = image.get_rect().center)
+        self.rect.centerx = int(self.odom.xcm)
+        self.rect.centery = int(self.odom.ycm)
+
 
     def _detect_collision(self):
         x1 = self.odom.xcm - self.r
@@ -542,22 +548,26 @@ class DefaultInput(object):
 
 
 class UserController(object):
-    def __init__(self, robot, callbacks):
+    def __init__(self, robot, callbacks, goal):
         self.robot          = robot
+        self.goal           = goal
         self.enabled        = True
         self.to_walk        = 0.0
         self.to_rotate      = 0.0
         self.vx             = 0.0
         self.wz             = 0.0
-        self.init           = callbacks.get("init",         skip)
-        self.bump_center    = callbacks.get("bump_center",  skip)
-        self.bump_left      = callbacks.get("bump_left",    skip)
-        self.bump_right     = callbacks.get("bump_right",   skip)
-        self.walk_done      = callbacks.get("walk_done",    skip)
-        self.rotate_done    = callbacks.get("rotate_done",  skip)
+        self.contador       = 0
+        self.commands       = []
+        self.init           = callbacks.get("init")         or self.skip
+        self.bump_center    = callbacks.get("bump_center")  or self.skip
+        self.bump_left      = callbacks.get("bump_left")    or self.skip
+        self.bump_right     = callbacks.get("bump_right")   or self.skip
+        self.walk_done      = callbacks.get("walk_done")    or self.skip
+        self.rotate_done    = callbacks.get("rotate_done")  or self.skip
         self._center        = False
         self._left          = False
         self._right         = False
+        self._time          = time.time()
 
     def update(self, dt):
         if self.enabled:
@@ -591,19 +601,67 @@ class UserController(object):
             self._left   = False
             self._right  = False
 
+    def skip(self, robot):
+        if self.commands:
+            cmd, val = self.commands.pop(0)
+            cmd(val)
+        else:
+            self.terminar()
+
     def andar(self, meters):
         self.vx = LINEAR
         self.wz = 0.0
         self.to_walk = meters
+        self.to_rotate = 0.0
 
     def rodar(self, radians):
         self.vx = 0.0
+        self.to_walk = 0.0
         if radians > 0:
             self.wz = ANGULAR
             self.to_rotate = radians
         elif radians < 0:
             self.wz = -ANGULAR
             self.to_rotate = -radians
+
+    def executar_depois(self, cmd, value):
+        self.commands.append((getattr(self, cmd), value))
+
+    def cancelar_comando(self):
+        if self.to_walk > 0.0 or self.to_rotate > 0.0:
+            self.to_walk = 0.0
+            self.to_rotate = 0.0
+            self.vx = 0.0
+            self.wz = 0.0
+            if self.commands:
+                cmd, val = self.commands.pop(0)
+                cmd(val)
+
+    def conta(self):
+        self.contador += 1
+
+    def desconta(self):
+        self.contador -= 1
+
+    def terminar(self):
+        self.vx = 0.0
+        self.wz = 0.0
+        self.to_walk = 0.0
+        self.to_rotate = 0.0
+        if not self.goal:
+            print "[TERMINADO]"
+        else:
+            x = self.robot.odom.x
+            y = self.robot.odom.y
+            x1 = self.goal[0]
+            x2 = self.goal[0] + self.goal[2]
+            y1 = self.goal[1]
+            y2 = self.goal[1] + self.goal[3]
+            if x >= x1 and x < x2 and y >= y1 and y < y2:
+                t = time.time() - self._time
+                print "[RESULTADO]: Sucesso! {0:.2f} segundos.".format(t)
+            else:
+                print "[RESULTADO]: Fracasso!"
 
 
 class SafetyController(object):
@@ -691,9 +749,12 @@ class State(object):
 
 
 class Game(State):
-    def __init__(self, width, height, ox, oy, img_path, callbacks, obstacles):
+    def __init__(self, width, height, ox, oy, oa, img_path, callbacks,
+                 obstacles, goal):
         State.__init__(self)
-        self.next = "menu"
+        self.next = "game"
+        self.goal = (int(goal[0] * 100), int(goal[1] * 100),
+                     int(goal[2] * 100), int(goal[3] * 100)) if goal else None
         self.arena = Arena(height, width, obstacles)
         self.robot = Robot(self, radius = 18, sprites = load_images(img_path))
         if not callbacks:
@@ -701,9 +762,9 @@ class Game(State):
         else:
             self.input = DefaultInput()
         self.safety = SafetyController(self.robot)
-        self.user = UserController(self.robot, callbacks or {})
-        self.robot.odom.reset(x = ox, y = oy)
-        self.robot.odom.reset(x = ox, y = oy)
+        self.user = UserController(self.robot, callbacks or {}, goal)
+        self.robot.odom.reset(x = ox, y = oy, a = oa)
+        self.robot.odom.reset(x = ox, y = oy, a = oa)
         # Kobuki diameter: 35.15cm
 
     def cleanup(self):
@@ -712,6 +773,7 @@ class Game(State):
     def startup(self):
         print("starting Game state stuff")
         self.user.init(self.user)
+        self.robot.update_image()
 
     def get_event(self, event):
         if event.type == pg.KEYDOWN:
@@ -734,10 +796,18 @@ class Game(State):
 
     def draw(self, screen):
         screen.fill((224,224,224))
+        if self.goal:
+            screen.fill((255, 192, 192), rect = self.goal)
         for i in xrange(self.arena.rows):
             for j in xrange(self.arena.columns):
                 if self.arena.is_wall(i, j):
                     screen.fill((128, 128, 128), rect = (32 * j, 32 * i, 32, 32))
+        w = self.arena.columns * TILE_SIZE
+        h = self.arena.rows * TILE_SIZE
+        for i in xrange(1, self.arena.rows):
+            pg.draw.line(screen, (0,0,0), (0, i * TILE_SIZE), (w, i * TILE_SIZE))
+        for i in xrange(1, self.arena.columns):
+            pg.draw.line(screen, (0,0,0), (i * TILE_SIZE, 0), (i * TILE_SIZE, h))
         self.robot.draw(screen)
 
 
@@ -810,8 +880,9 @@ def load_images(img_path):
 
 
 
-def run(width = ARENA_WIDTH, height = ARENA_HEIGHT, ox = 0.8, oy = 0.8,
-        obstacles = None, img_path = "pyguki/images/", callbacks = None):
+def run(width = ARENA_WIDTH, height = ARENA_HEIGHT, ox = 0.8, oy = 0.8, oa = 0.0,
+        obstacles = None, img_path = "pyguki/images/", callbacks = None,
+        goal = None):
     obstacles = obstacles or []
     settings = {
         "size": (width * TILE_SIZE, height * TILE_SIZE),
@@ -820,7 +891,8 @@ def run(width = ARENA_WIDTH, height = ARENA_HEIGHT, ox = 0.8, oy = 0.8,
 
     app = Control(**settings)
     state_dict = {
-        "game": Game(width, height, ox, oy, img_path, callbacks, obstacles)
+        "game": Game(width, height, ox, oy, oa, img_path, callbacks, obstacles,
+                     goal)
     }
     app.setup_states(state_dict, "game")
     app.main_game_loop()
