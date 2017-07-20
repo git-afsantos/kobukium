@@ -30,12 +30,18 @@ if len(sys.argv) < 2:
 
 module = imp.load_source("kobuki_noros.solution", sys.argv[1])
 
-rc = RobotController({
-    "init":         module.quando_inicia,
-    "bump_center":  module.quando_bate_na_frente,
-    "bump_left":    module.quando_bate_na_esquerda,
-    "bump_right":   module.quando_bate_na_direita,
-    "walk_done":    module.andar_feito,
-    "rotate_done":  module.rodar_feito
-})
+callbacks = { "init": module.quando_inicia }
+
+if hasattr(module, "quando_bate_na_frente"):
+    callbacks["bump_center"] = module.quando_bate_na_frente
+if hasattr(module, "quando_bate_na_esquerda"):
+    callbacks["bump_left"] = module.quando_bate_na_esquerda
+if hasattr(module, "quando_bate_na_direita"):
+    callbacks["bump_right"] = module.quando_bate_na_direita
+if hasattr(module, "andar_feito"):
+    callbacks["walk_done"] = module.andar_feito
+if hasattr(module, "rodar_feito"):
+    callbacks["rotate_done"] = module.rodar_feito
+
+rc = RobotController(callbacks)
 rc.run()
