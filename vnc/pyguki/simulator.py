@@ -748,6 +748,9 @@ class Game(State):
                  obstacles, goal):
         State.__init__(self)
         self.next = "game"
+        self.origin = (int(DRAW_RATIO * (ox - 0.125) * 100),
+                       int(DRAW_RATIO * (oy - 0.125) * 100),
+                       DRAW_RATIO * 25, DRAW_RATIO * 25)
         self.goal = (int(DRAW_RATIO * goal[0] * 100),
                      int(DRAW_RATIO * goal[1] * 100),
                      int(DRAW_RATIO * goal[2] * 100),
@@ -795,6 +798,7 @@ class Game(State):
         screen.fill((232,232,232))
         if self.goal:
             screen.fill((34, 139, 34), rect = self.goal)
+        screen.fill((128, 128, 255), rect = self.origin)
         for i in xrange(self.arena.rows):
             for j in xrange(self.arena.columns):
                 if self.arena.is_wall(i, j):
