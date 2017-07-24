@@ -48,7 +48,7 @@
   <!-- NoROS API node -->
   <arg name="api_script"/>
   <node name="noros_api" pkg="kobuki_noros" type="noros_programmable"
-   args="$(arg api_script)">
+   args="$(arg api_script)" required="true">
     <remap from="cmd_vel" to="cmd_vel_mux/api"/>
     <remap from="events/bumper" to="mobile_base/events/bumper"/>
   </node>

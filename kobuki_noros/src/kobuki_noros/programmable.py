@@ -31,8 +31,8 @@ from nav_msgs.msg import Odometry
 from tf.transformations import euler_from_quaternion
 
 PI2     = 2 * pi
-LINEAR  = 0.25  # m/s
-ANGULAR = pi/4  # rad/s
+LINEAR  = 0.2   # m/s
+ANGULAR = pi/6  # rad/s
 
 def angle_distance(alpha, beta):
     d = alpha - beta
@@ -66,7 +66,7 @@ class Robot(object):
         with self.lock:
             if not (self.bump_center or self.bump_left or self.bump_right):
                 self.translation += sqrt((x - self.x)**2 + (y - self.y)**2)
-                self.rotation += angle_distance(a, self.a)
+                self.rotation += abs(angle_distance(a, self.a))
             self.x = x
             self.y = y
             self.a = a
@@ -104,11 +104,19 @@ class Publisher(object):
         self.robot      = robot
         self.to_walk    = 0.0
         self.to_rotate  = 0.0
+        self.change_cmd = 0
         self.commands   = []
         self.contador   = 0
         self.thread     = None
         self.twist      = None
         self.shutdown   = False
+        self.stop_msg   = Twist()
+        self.stop_msg.linear.x  = 0
+        self.stop_msg.linear.y  = 0
+        self.stop_msg.linear.z  = 0
+        self.stop_msg.angular.x = 0
+        self.stop_msg.angular.y = 0
+        self.stop_msg.angular.z = 0
         self.init           = callbacks.get("init")         or self.skip
         self.bump_center    = callbacks.get("bump_center")  or self.skip
         self.bump_left      = callbacks.get("bump_left")    or self.skip
@@ -122,26 +130,36 @@ class Publisher(object):
         self.thread.start()
 
     def spin(self):
-        rate    = rospy.Rate(5)
+        rate    = rospy.Rate(15)
         cmd_vel = rospy.Publisher("cmd_vel", Twist, queue_size = 10)
         self.set_twist(0.0, 0.0)
         self.init(self)
         while not self.shutdown:
             state = self.robot.get_state()
-            if self.to_walk > 0.0:
-                self.to_walk -= state.translation
-                if self.to_walk <= 0.0:
-                    self.to_walk = 0.0
-                    self.set_twist(0.0, 0.0)
-                    self.walk_done(self)
-                cmd_vel.publish(self.twist)
-            if self.to_rotate > 0.0:
-                self.to_rotate -= abs(state.rotation)
-                if self.to_rotate <= 0.0:
-                    self.to_rotate = 0.0
-                    self.set_twist(0.0, 0.0)
-                    self.rotate_done(self)
-                cmd_vel.publish(self.twist)
+            if self.change_cmd:
+                self.change_cmd -= 1
+                cmd_vel.publish(self.stop_msg)
+            else:
+                if self.to_walk > 0.0:
+                    self.to_walk -= state.translation
+                    if self.to_walk <= 0.0:
+                        self.to_walk = 0.0
+                        self.set_twist(0.0, 0.0)
+                        self.walk_done(self)
+                    if self.change_cmd:
+                        cmd_vel.publish(self.stop_msg)
+                    else:
+                        cmd_vel.publish(self.twist)
+                if self.to_rotate > 0.0:
+                    self.to_rotate -= state.rotation
+                    if self.to_rotate <= 0.0:
+                        self.to_rotate = 0.0
+                        self.set_twist(0.0, 0.0)
+                        self.rotate_done(self)
+                    if self.change_cmd:
+                        cmd_vel.publish(self.stop_msg)
+                    else:
+                        cmd_vel.publish(self.twist)
             if state.bump_center:
                 self.bump_center(self)
             elif state.bump_left:
@@ -152,13 +170,16 @@ class Publisher(object):
         cmd_vel.unregister()
 
     def set_twist(self, vx, wz):
-        self.twist = Twist()
-        self.twist.linear.x = vx
-        self.twist.linear.y = 0
-        self.twist.linear.z = 0
-        self.twist.angular.x = 0
-        self.twist.angular.y = 0
-        self.twist.angular.z = wz
+        if vx == 0.0 and wz == 0.0:
+            self.twist = self.stop_msg
+        else:
+            self.twist = Twist()
+            self.twist.linear.x = vx
+            self.twist.linear.y = 0
+            self.twist.linear.z = 0
+            self.twist.angular.x = 0
+            self.twist.angular.y = 0
+            self.twist.angular.z = wz
 
     def skip(self, robot):
         if self.commands:
@@ -169,11 +190,14 @@ class Publisher(object):
 
 
     def andar(self, meters):
-        self.to_walk = meters
+        self.change_cmd = 3
         self.to_rotate = 0.0
-        self.set_twist(LINEAR, 0.0)
+        if meters > 0:
+            self.to_walk = meters
+            self.set_twist(LINEAR, 0.0)
 
     def rodar(self, radians):
+        self.change_cmd = 3
         self.to_walk = 0.0
         if radians > 0:
             self.to_rotate = radians
