@@ -792,13 +792,13 @@ class Game(State):
         self.robot.update(dt)
 
     def draw(self, screen):
-        screen.fill((224,224,224))
+        screen.fill((232,232,232))
         if self.goal:
-            screen.fill((255, 192, 192), rect = self.goal)
+            screen.fill((34, 139, 34), rect = self.goal)
         for i in xrange(self.arena.rows):
             for j in xrange(self.arena.columns):
                 if self.arena.is_wall(i, j):
-                    screen.fill((128, 128, 128),
+                    screen.fill((139, 69, 19),
                                 rect = (TILE_SIZE * j, TILE_SIZE * i,
                                         TILE_SIZE, TILE_SIZE))
         w = self.arena.columns * TILE_SIZE
