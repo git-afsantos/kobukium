@@ -12,7 +12,7 @@ OA = pi/2
 OBSTACLES = [(3, 3)]
 
 simulator.run(width = WIDTH, height = HEIGHT, ox = OX, oy = OY, oa = OA,
-              obstacles = OBSTACLES,
+              obstacles = OBSTACLES, fuzzy = True,
               goal = (OX - 0.16, OY - 0.16, 0.32, 0.32),
               callbacks = {
                 "init":         getattr(solucao, "quando_inicia"),

@@ -21,20 +21,24 @@
 
 import time
 from math import pi, cos, sin, sqrt, isnan, degrees
+from random import gauss
 import pygame as pg
 import sys
 
-TWO_PI = 2 * pi
-PI_2 = pi / 2
-PI_6 = pi / 6
-TILE_SIZE = 64
-REAL_TILE_SIZE = 32
-DRAW_RATIO = TILE_SIZE / REAL_TILE_SIZE
-SPRITE_SIZE = int(DRAW_RATIO * 36)
-ARENA_WIDTH = 6
-ARENA_HEIGHT = 9
-LINEAR  = 0.25  # m/s
-ANGULAR = pi/4  # rad/s
+TWO_PI  = 2 * pi
+PI_2    = pi / 2
+PI_6    = pi / 6
+
+TILE_SIZE       = 64
+REAL_TILE_SIZE  = 32
+DRAW_RATIO      = TILE_SIZE / REAL_TILE_SIZE
+SPRITE_SIZE     = int(DRAW_RATIO * 36)
+ARENA_WIDTH     = 6
+ARENA_HEIGHT    = 9
+
+LINEAR              = 0.25  # m/s
+ANGULAR             = pi/4  # rad/s
+RANDOM_DEVIATION    = 0.075
 
 def angle_distance(alpha, beta):
     d = alpha - beta
@@ -543,9 +547,10 @@ class DefaultInput(object):
 
 
 class UserController(object):
-    def __init__(self, robot, callbacks, goal):
+    def __init__(self, robot, callbacks, goal, fuzzy):
         self.robot          = robot
         self.goal           = goal
+        self.fuzzy          = fuzzy
         self.enabled        = True
         self.to_walk        = 0.0
         self.to_rotate      = 0.0
@@ -606,8 +611,10 @@ class UserController(object):
     def andar(self, meters):
         self.vx = LINEAR
         self.wz = 0.0
-        self.to_walk = meters
         self.to_rotate = 0.0
+        self.to_walk = meters
+        if self.fuzzy:
+            self.to_walk *= gauss(1.0, RANDOM_DEVIATION)
 
     def rodar(self, radians):
         self.vx = 0.0
@@ -618,6 +625,8 @@ class UserController(object):
         elif radians < 0:
             self.wz = -ANGULAR
             self.to_rotate = -radians
+        if self.fuzzy:
+            self.to_rotate *= gauss(1.0, RANDOM_DEVIATION)
 
     def executar_depois(self, cmd, value):
         self.commands.append((getattr(self, cmd), value))
@@ -745,7 +754,7 @@ class State(object):
 
 class Game(State):
     def __init__(self, width, height, ox, oy, oa, img_path, callbacks,
-                 obstacles, goal):
+                 obstacles, goal, fuzzy):
         State.__init__(self)
         self.next = "game"
         self.origin = (int(DRAW_RATIO * (ox - 0.125) * 100),
@@ -762,7 +771,7 @@ class Game(State):
         else:
             self.input = DefaultInput()
         self.safety = SafetyController(self.robot)
-        self.user = UserController(self.robot, callbacks or {}, goal)
+        self.user = UserController(self.robot, callbacks or {}, goal, fuzzy)
         self.robot.odom.reset(x = ox, y = oy, a = oa)
         self.robot.odom.reset(x = ox, y = oy, a = oa)
         # Kobuki diameter: 35.15cm
@@ -885,7 +894,7 @@ def load_images(img_path):
 
 def run(width = ARENA_WIDTH, height = ARENA_HEIGHT, ox = 0.8, oy = 0.8, oa = 0.0,
         obstacles = None, img_path = "pyguki/images/", callbacks = None,
-        goal = None):
+        goal = None, fuzzy = False):
     obstacles = obstacles or []
     settings = {
         "size": (width * TILE_SIZE, height * TILE_SIZE),
@@ -895,7 +904,7 @@ def run(width = ARENA_WIDTH, height = ARENA_HEIGHT, ox = 0.8, oy = 0.8, oa = 0.0
     app = Control(**settings)
     state_dict = {
         "game": Game(width, height, ox, oy, oa, img_path, callbacks, obstacles,
-                     goal)
+                     goal, fuzzy)
     }
     app.setup_states(state_dict, "game")
     app.main_game_loop()
