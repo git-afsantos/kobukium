@@ -27,7 +27,10 @@ import sys
 TWO_PI = 2 * pi
 PI_2 = pi / 2
 PI_6 = pi / 6
-TILE_SIZE = 32
+TILE_SIZE = 64
+REAL_TILE_SIZE = 32
+DRAW_RATIO = TILE_SIZE / REAL_TILE_SIZE
+SPRITE_SIZE = int(DRAW_RATIO * 36)
 ARENA_WIDTH = 6
 ARENA_HEIGHT = 9
 LINEAR  = 0.25  # m/s
@@ -391,17 +394,9 @@ class Robot(pg.sprite.Sprite):
             original = self.sprites.sprite
             self.image = pg.transform.rotate(original, angle)
             self.rect = self.image.get_rect(center = original.get_rect().center)
-        self.rect.centerx = int(self.odom.xcm)
-        self.rect.centery = int(self.odom.ycm)
+        self.rect.centerx = int(DRAW_RATIO * self.odom.xcm)
+        self.rect.centery = int(DRAW_RATIO * self.odom.ycm)
         screen.blit(self.image, (self.rect.x, self.rect.y))
-
-    @property
-    def row(self):
-        return self.odom.iy // TILE_SIZE
-
-    @property
-    def col(self):
-        return self.odom.ix // TILE_SIZE
 
     def set_image(self, name):
         if name == self.sprites.current:
@@ -706,7 +701,7 @@ class Arena(object):
         self.obstacles = obstacles
 
     def is_wall_xy(self, x, y):
-        return self.is_wall(int(y) // TILE_SIZE, int(x) // TILE_SIZE)
+        return self.is_wall(int(y) // REAL_TILE_SIZE, int(x) // REAL_TILE_SIZE)
 
     def is_wall(self, row, col):
         if row < 0 or row >= self.rows:
@@ -718,16 +713,16 @@ class Arena(object):
         return False
 
     def y_below(self, y):
-        return ((int(y) // TILE_SIZE) + 1) * TILE_SIZE - 1.0
+        return ((int(y) // REAL_TILE_SIZE) + 1) * REAL_TILE_SIZE - 1.0
 
     def y_above(self, y):
-        return (int(y) // TILE_SIZE) * TILE_SIZE
+        return (int(y) // REAL_TILE_SIZE) * REAL_TILE_SIZE
 
     def x_right(self, x):
-        return ((int(x) // TILE_SIZE) + 1) * TILE_SIZE - 1.0
+        return ((int(x) // REAL_TILE_SIZE) + 1) * REAL_TILE_SIZE - 1.0
 
     def x_left(self, x):
-        return (int(x) // TILE_SIZE) * TILE_SIZE
+        return (int(x) // REAL_TILE_SIZE) * REAL_TILE_SIZE
 
 
 
@@ -753,8 +748,10 @@ class Game(State):
                  obstacles, goal):
         State.__init__(self)
         self.next = "game"
-        self.goal = (int(goal[0] * 100), int(goal[1] * 100),
-                     int(goal[2] * 100), int(goal[3] * 100)) if goal else None
+        self.goal = (int(DRAW_RATIO * goal[0] * 100),
+                     int(DRAW_RATIO * goal[1] * 100),
+                     int(DRAW_RATIO * goal[2] * 100),
+                     int(DRAW_RATIO * goal[3] * 100)) if goal else None
         self.arena = Arena(height, width, obstacles)
         self.robot = Robot(self, radius = 18, sprites = load_images(img_path))
         if not callbacks:
@@ -801,7 +798,9 @@ class Game(State):
         for i in xrange(self.arena.rows):
             for j in xrange(self.arena.columns):
                 if self.arena.is_wall(i, j):
-                    screen.fill((128, 128, 128), rect = (32 * j, 32 * i, 32, 32))
+                    screen.fill((128, 128, 128),
+                                rect = (TILE_SIZE * j, TILE_SIZE * i,
+                                        TILE_SIZE, TILE_SIZE))
         w = self.arena.columns * TILE_SIZE
         h = self.arena.rows * TILE_SIZE
         for i in xrange(1, self.arena.rows):
@@ -860,21 +859,21 @@ class Control(object):
 def load_images(img_path):
     spritesheet = Spritesheet(img_path + "spritesheet.png")
     sprite = MultiPoseSprite()
-    seq = ImageSequence(spritesheet, (0, 0, 36, 36), 1, 1)
+    seq = ImageSequence(spritesheet, (0, 0, SPRITE_SIZE, SPRITE_SIZE), 1, 1)
     sprite.add_sprite("normal", seq)
-    seq = ImageSequence(spritesheet, (36, 0, 36, 36), 1, 1)
+    seq = ImageSequence(spritesheet, (SPRITE_SIZE, 0, SPRITE_SIZE, SPRITE_SIZE), 1, 1)
     sprite.add_sprite("collision-c", seq)
-    seq = ImageSequence(spritesheet, (36*2, 0, 36, 36), 1, 1)
+    seq = ImageSequence(spritesheet, (SPRITE_SIZE*2, 0, SPRITE_SIZE, SPRITE_SIZE), 1, 1)
     sprite.add_sprite("collision-l", seq)
-    seq = ImageSequence(spritesheet, (36*3, 0, 36, 36), 1, 1)
+    seq = ImageSequence(spritesheet, (SPRITE_SIZE*3, 0, SPRITE_SIZE, SPRITE_SIZE), 1, 1)
     sprite.add_sprite("collision-r", seq)
-    seq = ImageSequence(spritesheet, (36*4, 0, 36, 36), 1, 1)
+    seq = ImageSequence(spritesheet, (SPRITE_SIZE*4, 0, SPRITE_SIZE, SPRITE_SIZE), 1, 1)
     sprite.add_sprite("collision-cl", seq)
-    seq = ImageSequence(spritesheet, (36*5, 0, 36, 36), 1, 1)
+    seq = ImageSequence(spritesheet, (SPRITE_SIZE*5, 0, SPRITE_SIZE, SPRITE_SIZE), 1, 1)
     sprite.add_sprite("collision-cr", seq)
-    seq = ImageSequence(spritesheet, (36*6, 0, 36, 36), 1, 1)
+    seq = ImageSequence(spritesheet, (SPRITE_SIZE*6, 0, SPRITE_SIZE, SPRITE_SIZE), 1, 1)
     sprite.add_sprite("collision-clr", seq)
-    seq = ImageSequence(spritesheet, (36*7, 0, 36, 36), 1, 1)
+    seq = ImageSequence(spritesheet, (SPRITE_SIZE*7, 0, SPRITE_SIZE, SPRITE_SIZE), 1, 1)
     sprite.add_sprite("collision-lr", seq)
     return sprite
 
