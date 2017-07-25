@@ -791,7 +791,6 @@ class Game(State):
         print("cleaning up Game state stuff")
 
     def startup(self):
-        print("starting Game state stuff")
         self.user.init(self.user)
         self.robot.update_image()
 
