@@ -558,6 +558,7 @@ class UserController(object):
         self.wz             = 0.0
         self.contador       = 0
         self.commands       = []
+        self.walked_path    = [(robot.odom.x, robot.odom.y)]
         self.init           = callbacks.get("init")         or self.skip
         self.bump_center    = callbacks.get("bump_center")  or self.skip
         self.bump_left      = callbacks.get("bump_left")    or self.skip
@@ -568,6 +569,7 @@ class UserController(object):
         self._left          = False
         self._right         = False
         self._time          = time.time()
+        self._was_enabled   = True
 
     def update(self, dt):
         if self.enabled:
@@ -578,6 +580,8 @@ class UserController(object):
                     self.vx = 0.0
                     self.wz = 0.0
                     self.walk_done(self)
+                    self.walked_path.append((self.robot.odom.x,
+                                             self.robot.odom.y))
                 self.robot.drive.set_velocity_commands(self.vx, self.wz)
             if self.to_rotate > 0.0:
                 self.to_rotate -= abs(self.robot.odom.rotated)
@@ -587,19 +591,25 @@ class UserController(object):
                     self.wz = 0.0
                     self.rotate_done(self)
                 self.robot.drive.set_velocity_commands(self.vx, self.wz)
+            if not self._was_enabled:
+                self.walked_path.append((self.robot.odom.x, self.robot.odom.y))
         if self.robot.bumper.center and not self._center:
             self._center = True
             self.bump_center(self)
+            self.walked_path.append((self.robot.odom.x, self.robot.odom.y))
         elif self.robot.bumper.left and not self._left:
             self._left = True
             self.bump_left(self)
+            self.walked_path.append((self.robot.odom.x, self.robot.odom.y))
         elif self.robot.bumper.right and not self._right:
             self._right = True
             self.bump_right(self)
+            self.walked_path.append((self.robot.odom.x, self.robot.odom.y))
         elif not self.robot.bumper.active:
             self._center = False
             self._left   = False
             self._right  = False
+        self._was_enabled = self.enabled
 
     def skip(self, robot):
         if self.commands:
@@ -637,6 +647,7 @@ class UserController(object):
             self.to_rotate = 0.0
             self.vx = 0.0
             self.wz = 0.0
+            self.walked_path.append((self.robot.odom.x, self.robot.odom.y))
             if self.commands:
                 cmd, val = self.commands.pop(0)
                 cmd(val)
@@ -766,15 +777,15 @@ class Game(State):
                      int(DRAW_RATIO * goal[3] * 100)) if goal else None
         self.arena = Arena(height, width, obstacles)
         self.robot = Robot(self, radius = 18, sprites = load_images(img_path))
+        # Kobuki diameter: 35.15cm
+        self.robot.odom.reset(x = ox, y = oy, a = oa)
+        self.robot.odom.reset(x = ox, y = oy, a = oa)
         if not callbacks:
             self.input = Keyop(self.robot)
         else:
             self.input = DefaultInput()
         self.safety = SafetyController(self.robot)
         self.user = UserController(self.robot, callbacks or {}, goal, fuzzy)
-        self.robot.odom.reset(x = ox, y = oy, a = oa)
-        self.robot.odom.reset(x = ox, y = oy, a = oa)
-        # Kobuki diameter: 35.15cm
 
     def cleanup(self):
         print("cleaning up Game state stuff")
@@ -820,6 +831,16 @@ class Game(State):
             pg.draw.line(screen, (0,0,0), (0, i * TILE_SIZE), (w, i * TILE_SIZE))
         for i in xrange(1, self.arena.columns):
             pg.draw.line(screen, (0,0,0), (i * TILE_SIZE, 0), (i * TILE_SIZE, h))
+        p = self.user.walked_path[0]
+        p = (int(DRAW_RATIO * p[0] * 100), int(DRAW_RATIO * p[1] * 100))
+        for i in xrange(1, len(self.user.walked_path)):
+            o = self.user.walked_path[i]
+            o = (int(DRAW_RATIO * o[0] * 100), int(DRAW_RATIO * o[1] * 100))
+            pg.draw.line(screen, (255, 99, 71), (p[0], p[1]), (o[0], o[1]), 3)
+            p = o
+        o = (int(DRAW_RATIO * self.robot.odom.x * 100),
+             int(DRAW_RATIO * self.robot.odom.y * 100))
+        pg.draw.line(screen, (255, 99, 71), (p[0], p[1]), (o[0], o[1]), 3)
         self.robot.draw(screen)
 
 
@@ -898,7 +919,7 @@ def run(width = ARENA_WIDTH, height = ARENA_HEIGHT, ox = 0.8, oy = 0.8, oa = 0.0
     obstacles = obstacles or []
     settings = {
         "size": (width * TILE_SIZE, height * TILE_SIZE),
-        "fps" : 60
+        "fps" : 30
     }
 
     app = Control(**settings)
