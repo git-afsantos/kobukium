@@ -1,3 +1,4 @@
+# -*- coding=utf-8 -*-
 from math import pi, sin, cos, sqrt
 
 # Cada tela mede 0.32 metros de lado.
